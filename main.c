@@ -10,7 +10,7 @@
 
 int main()
 {
-    char *inbuf = loadFile("tests/testad.c");
+    char *inbuf = loadFile("tests/testat.c");
     //puts(inbuf);
 
     Token *tokens = tokenize(inbuf);
@@ -27,5 +27,6 @@ int main()
     showDomain(symTable, "global");
     dropDomain();
 
+    free(tokens);
     return 0;
 }

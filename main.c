@@ -6,6 +6,7 @@
 #include "utils.h"
 #include "parser.h"
 #include "ad.h"
+#include "at.h"
 #include "vm.h"
 
 int main()
@@ -21,12 +22,18 @@ int main()
     //compareFiles("my-output.txt", "tests/lista-de-atomi.txt");
 
     pushDomain();
+    vmInit();
 
     parse(tokens);
 
-    showDomain(symTable, "global");
+    Instr *testCode = genTestProgram();
+    run(testCode);
+
+    //showDomain(symTable, "global");
     dropDomain();
 
+    free(testCode);
     free(tokens);
+    
     return 0;
 }

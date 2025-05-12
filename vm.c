@@ -2,6 +2,13 @@
 
 #include "utils.h"
 #include "ad.h"
+#include "vm.h"
+
+#define MAXSTACK 10000
+
+Val stack[MAXSTACK];		// the stack
+Val *SP = stack - 1;		// Stack pointer - the stack's top - points to the value from the top of the stack
+Val *FP = NULL;		 		// the initial value doesn't matter
 
 Instr *addInstr(Instr **list,Opcode op){
 	Instr *i=(Instr*)safeAlloc(sizeof(Instr));
@@ -29,12 +36,8 @@ Instr *addInstrWithDouble(Instr **list,Opcode op,double argVal){
 	return i;
 	}
 
-Val stack[10000];		// the stack
-Val *SP=stack-1;		// Stack pointer - the stack's top - points to the value from the top of the stack
-Val *FP=NULL;		// the initial value doesn't matter
-
 void pushv(Val v){
-	if(SP+1==stack+10000)err("trying to push into a full stack");
+	if(SP+1 == stack + MAXSTACK)err("trying to push into a full stack");
 	*++SP=v;
 	}
 
@@ -44,7 +47,7 @@ Val popv(){
 	}
 
 void pushi(int i){
-	if(SP+1==stack+10000)err("trying to push into a full stack");
+	if(SP+1 == stack + MAXSTACK)err("trying to push into a full stack");
 	(++SP)->i=i;
 	}
 
@@ -54,7 +57,7 @@ int popi(){
 	}
 
 void pushp(void *p){
-	if(SP+1==stack+10000)err("trying to push into a full stack");
+	if(SP+1 == stack + MAXSTACK)err("trying to push into a full stack");
 	(++SP)->p=p;
 	}
 
@@ -63,18 +66,41 @@ void *popp(){
 	return SP--->p;
 	}
 
+void pushf(double f) {
+	if (SP + 1 == stack + MAXSTACK) {
+		err("trying to push into a full stack");
+	}
+	(++SP)->f = f;
+}
+double popf() {
+	if (SP == stack - 1) {
+		err("trying to pop from empty stack");
+	}
+	return SP--->f;
+}
+
 void put_i(){
 	printf("=> %d",popi());
 	}
 
+void put_d(){
+	printf("=> %f",popf());
+	}
+
 void vmInit(){
-	Symbol *fn=addExtFn("put_i",put_i,(Type){TB_VOID,NULL,-1});
+	Symbol *fn;
+	
+	fn = addExtFn("put_i",put_i,(Type){TB_VOID,NULL,-1});
 	addFnParam(fn,"i",(Type){TB_INT,NULL,-1});
+
+	fn = addExtFn("put_d",put_d,(Type){TB_VOID,NULL,-1});
+	addFnParam(fn,"d",(Type){TB_DOUBLE,NULL,-1});
 	}
 
 void run(Instr *IP){
 	Val v;
-	int iArg,iTop,iBefore;
+	int iArg, iTop, iBefore;
+	double fTop, fBefore;
 	void(*extFnPtr)();
 	for(;;){
 		// shows the index of the current instruction and the number of values from stack
@@ -86,6 +112,11 @@ void run(Instr *IP){
 			case OP_PUSH_I:
 				printf("PUSH.i\t%d",IP->arg.i);
 				pushi(IP->arg.i);
+				IP=IP->next;
+				break;
+			case OP_PUSH_F:
+				printf("PUSH.f\t%g",IP->arg.f);
+				pushf(IP->arg.f);
 				IP=IP->next;
 				break;
 			case OP_CALL:
@@ -141,6 +172,13 @@ void run(Instr *IP){
 				printf("ADD.i\t// %d+%d -> %d",iBefore,iTop,iBefore+iTop);
 				IP=IP->next;
 				break;
+			case OP_ADD_F:
+				fTop = popf();
+				fBefore = popf();
+				pushf(fBefore + fTop);
+				printf("ADD.f\t// %g+%g -> %g", fBefore, fTop, fBefore + fTop);
+				IP = IP->next;
+				break;
 			case OP_LESS_I:
 				iTop=popi();
 				iBefore=popi();
@@ -148,7 +186,15 @@ void run(Instr *IP){
 				printf("LESS.i\t// %d<%d -> %d",iBefore,iTop,iBefore<iTop);
 				IP=IP->next;
 				break;
-			default:err("run: instructiune neimplementata: %d",IP->op);
+			case OP_LESS_F:
+				fTop = popf();
+				fBefore = popf();
+				pushi(fBefore < fTop);
+				printf("LESS.f\t// %g<%g -> %d", fBefore, fTop, fBefore < fTop);
+				IP = IP->next;
+				break;
+			default:
+				err("run: instruction not implemented: %d", IP->op);
 			}
 		putchar('\n');
 		}
@@ -194,3 +240,46 @@ Instr *genTestProgram(){
 	jfAfter->arg.instr=addInstrWithInt(&code,OP_RET_VOID,1);
 	return code;
 	}
+
+
+/* The program implements the following AtomC source code:
+f(2.0);
+void f(double n){
+	double i=0.0;
+	while(i<n){
+		put_d(i);
+		i=i+0.5;
+	}
+}
+*/
+
+Instr *genTestProgram2(){
+	Instr *code=NULL;
+	addInstrWithDouble(&code,OP_PUSH_F,2.0);
+	Instr *callPos=addInstr(&code,OP_CALL);
+	addInstr(&code,OP_HALT);
+	callPos->arg.instr=addInstrWithInt(&code,OP_ENTER,1);
+	// double i=0.0;
+	addInstrWithDouble(&code,OP_PUSH_F,0.0);
+	addInstrWithInt(&code,OP_FPSTORE,1);
+	// while(i<n){
+	Instr *whilePos=addInstrWithInt(&code,OP_FPLOAD,1);
+	addInstrWithInt(&code,OP_FPLOAD,-2);
+	addInstr(&code,OP_LESS_F);
+	Instr *jfAfter=addInstr(&code,OP_JF);
+	// put_d(i);
+	addInstrWithInt(&code,OP_FPLOAD,1);
+	Symbol *s=findSymbol("put_d");
+	if(!s)err("undefined: put_d");
+	addInstr(&code,OP_CALL_EXT)->arg.extFnPtr=s->fn.extFnPtr;
+	// i=i+0.5;
+	addInstrWithInt(&code,OP_FPLOAD,1);
+	addInstrWithDouble(&code,OP_PUSH_F,0.5);
+	addInstr(&code,OP_ADD_F);
+	addInstrWithInt(&code,OP_FPSTORE,1);
+	// } ( the next iteration)
+	addInstr(&code,OP_JMP)->arg.instr=whilePos;
+	// returns from function
+	jfAfter->arg.instr=addInstrWithInt(&code,OP_RET_VOID,1);
+	return code;
+}

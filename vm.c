@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "utils.h"
 #include "ad.h"
@@ -22,6 +23,30 @@ Instr *addInstr(Instr **list,Opcode op){
 		*list=i;
 		}
 	return i;
+	}
+
+Instr *insertInstr(Instr *before,int op){
+	Instr *i=(Instr*)safeAlloc(sizeof(Instr));
+	i->op=op;
+	i->next=before->next;
+	before->next=i;
+	return i;
+	}
+
+void delInstrAfter(Instr *instr){
+	if(!instr)return;
+	for(Instr *next=instr->next,*i=next;i;i=next){
+		next=i->next;
+		free(i);
+		}
+	instr->next=NULL;
+}
+
+Instr *lastInstr(Instr *list){
+	if(list){
+		while(list->next)list=list->next;
+		}
+	return list;
 	}
 
 Instr *addInstrWithInt(Instr **list,Opcode op,int argVal){
@@ -101,6 +126,7 @@ void run(Instr *IP){
 	Val v;
 	int iArg, iTop, iBefore;
 	double fTop, fBefore;
+	void *pTop;
 	void(*extFnPtr)();
 	for(;;){
 		// shows the index of the current instruction and the number of values from stack
@@ -192,6 +218,64 @@ void run(Instr *IP){
 				pushi(fBefore < fTop);
 				printf("LESS.f\t// %g<%g -> %d", fBefore, fTop, fBefore < fTop);
 				IP = IP->next;
+				break;
+			case OP_CONV_F_I:
+				fTop=popf();
+				pushi((int)fTop);
+				printf("CONV.f.i\t// %g -> %d",fTop,(int)fTop);
+				IP=IP->next;
+				break;
+			case OP_DROP:
+				popv();
+				printf("DROP");
+				IP=IP->next;
+				break;
+			case OP_FPADDR_I:
+				pTop=&FP[IP->arg.i].i;
+				pushp(pTop);
+				printf("FPADDR\t%d\t// %p",IP->arg.i,pTop);
+				IP=IP->next;
+				break;
+			case OP_LOAD_I:
+				pTop=popp();
+				pushi(*(int*)pTop);
+				printf("LOAD.i\t// *(int*)%p -> %d",pTop,*(int*)pTop);
+				IP=IP->next;
+				break;
+			case OP_NOP:
+				printf("NOP");
+				IP=IP->next;
+				break;
+			case OP_RET:
+				v=popv();
+				iArg=IP->arg.i;
+				printf("RET\t%d\t// i:%d, f:%g",iArg,v.i,v.f);
+				IP=FP[-1].p;
+				SP=FP-iArg-2;
+				FP=FP[0].p;
+				pushv(v);
+				break;
+			case OP_SUB_I:
+				iTop=popi();
+				iBefore=popi();
+				pushi(iBefore-iTop);
+				printf("SUB.i\t// %d-%d -> %d",iBefore,iTop,iBefore-iTop);
+				IP=IP->next;
+				break;
+			case OP_MUL_I:
+				iTop=popi();
+				iBefore=popi();
+				pushi(iBefore*iTop);
+				printf("MUL.i\t// %d*%d -> %d",iBefore,iTop,iBefore*iTop);
+				IP=IP->next;
+				break;
+			case OP_STORE_I:
+				iTop=popi();
+				v=popv();
+				*(int*)v.p=iTop;
+				pushi(iTop);
+				printf("STORE.i\t// *(int*)%p=%d",v.p,iTop);
+				IP=IP->next;
 				break;
 			default:
 				err("run: instruction not implemented: %d", IP->op);

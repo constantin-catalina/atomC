@@ -116,6 +116,34 @@ exprPostfix: ```exprPostfix LBRACKET expr RBRACKET
 exprPrimary: ```ID ( LPAR ( expr ( COMMA expr )* )? RPAR )?
 | INT | DOUBLE | CHAR | STRING | LPAR expr RPAR```
 
+## How to Build and Run
+
+Steps:
+1. Clone the repository:
+   ```
+   git clone https://github.com/constantin-catalina/atomC.git
+   cd atomC
+   ```
+2. Build the project:
+   ```
+   make
+   ```
+   This will:
+
+    - Compile the source files (*.c) into object files (*.o)
+    
+    - Link them into an executable named prog
+    
+    - Clean up intermediate object files
+    
+3. Run the program:
+   ```
+   ./prog
+   ```
+4. Clean up (optional):
+   ```
+   make clean
+   ```
 ## License
 MIT License - free for educational and personal use
 
